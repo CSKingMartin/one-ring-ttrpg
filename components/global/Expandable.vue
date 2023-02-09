@@ -1,91 +1,161 @@
 <template>
   <div
-    class="relative inline-flex flex-col items-start justify-center"
-    ref="htmlRoot"
+    class="
+      relative
+      inline-flex
+      flex-col
+      items-start
+      justify-center
+      max-w-[100vw]
+    "
+    :class="state.open && 'is-open'"
+    id="expandable"
+    ref="root"
+    v-click-outside="onClickOutside"
   >
     <button
-      @click="toggleDrawer()"
+      @click="
+        () => {
+          state.active && onClick()
+        }
+      "
       aria-has-popup
       class="
-        flex
-        w-auto
-        flex-grow-0
-        cursor-pointer
-        items-center
-        self-start
-        rounded-[60px]
-        text-left
+        flex flex-grow-0
         font-bold
+        items-center
+        relative
+        self-start
+        text-left
+        w-auto
+        z-10
       "
+      :class="state.active && 'cursor-pointer'"
     >
-      <slot name="toggle" />
+      <!-- TOGGLE SLOT -->
+      <div class="pr-[24px]">
+        <slot name="toggle" />
+      </div>
+      <SvgChevron
+        v-show="state.active"
+        class="
+          ml-[4px]
+          transition-transform
+          duration-200
+          rotate-180
+          translate-y-[2px]
+          min-w-[17px]
+          absolute
+          right-0
+        "
+        :class="state.open && 'rotate-0'"
+      />
     </button>
     <div
-      class="
-        body
-        transition-height
-        absolute
-        top-[40px]
-        right-[-25px]
-        col-span-12 col-start-2
-        overflow-hidden
-        duration-200
-      "
-      ref="drawer"
-      :style="`height: ${state.open ? state.drawerHeight : '0px'}`"
+      class="body duration-200 transition-height w-auto z-20 max-w-[100vw]"
+      :aria-expanded="state.open"
+      :style="drawerStyles"
     >
-      <div
-        ref="drawerInnerWrap"
-        class="flex flex-col rounded-[25px] bg-white py-[15px] px-[25px]"
-      >
+      <div ref="drawer" class="flex flex-col bg-white relative z-20">
+        <!-- CONTENT SLOT -->
         <slot name="content" />
       </div>
     </div>
   </div>
 </template>
 <script setup lang="ts">
-import throttle from 'lodash-es/throttle'
+// REFS
+const root = ref(null)
+const drawer = ref(null)
+
+// VUE LIFECYCLE
 const props = defineProps({
-  breakpoint: { type: String },
+  active: { type: [String, Boolean], default: true },
 })
 
 const state = reactive({
-  drawerHeight: '0px',
   open: false,
   active: false,
+  minWidth: 0,
 })
 
-// for measuring the drawer / expand
-const htmlRoot = ref(null)
-const drawerInnerWrap = ref(null)
-
-function toggleDrawer() {
-  if (state.open) {
-    state.drawerHeight = '0px'
-  } else {
-    state.drawerHeight = calcDrawerHeight()
+// STYLE DECLARATIONS
+const drawerStyles = computed(() => {
+  const activeStyles = {
+    height: state.open ? state.drawerHeight : '0px',
+    overflow: 'hidden',
+    position: 'absolute',
+    minWidth: `${state.minWidth + 25}px`,
+    top: 'calc(100% + 2px)',
   }
-  htmlRoot.value.classList.toggle('is-open')
-  state.open = !state.open
+
+  return state.active ? activeStyles : inactiveStyles
+})
+
+const inactiveStyles = {
+  height: 'auto',
+  overflowY: 'visible',
+  position: 'relative',
+  minWidth: 'unset',
+  top: 'unset',
 }
 
-const calcDrawerHeight = throttle((e) => {
-  if (drawerInnerWrap.value) {
-    const { height } = drawerInnerWrap.value.getBoundingClientRect()
-    return `${height}px`
-  } else {
-    return state.drawerHeight
-  }
-}, 33)
-</script>
-<style scoped>
-.is-open {
-  button {
-    /* background: theme(colors.white); */
+// LIFECYCLE METHODS
+onMounted(() => {
+  state.active = props.active
+  findWidestNode(drawer.value)
+})
 
-    svg {
-      transform: rotate(0deg) translateY(-2px);
+onUpdated(() => {
+  // State was changed externally
+  if (state.active != props.active) {
+    state.active = props.active
+    closeMyChildren()
+  }
+})
+
+// HELPER METHODS
+function getHeight() {
+  const { height } = drawer.value.getBoundingClientRect()
+  return `${height}px`
+}
+
+function findWidestNode(root) {
+  Object.values(root.children).forEach((node) => {
+    const { width } = node.getBoundingClientRect()
+    if (width > state.minWidth) {
+      state.minWidth = width
+    }
+  })
+}
+
+function closeMyChildren() {
+  Object.values(drawer.value.children).forEach((node) => {
+    if (node.id === 'expandable' && node.classList.contains('is-open')) {
+      node.firstChild.click()
+    }
+  })
+}
+
+// EVENT RESPONDERS
+function onClick() {
+  if (state.active) {
+    state.drawerHeight = getHeight()
+    state.open = !state.open
+
+    // Opening the Expandable
+    if (state.open) {
+      setTimeout(() => {
+        drawer.value.parentElement.style.overflow = 'visible'
+      }, 200)
+      // Closing the Expandable
+    } else {
+      closeMyChildren()
     }
   }
 }
-</style>
+
+function onClickOutside() {
+  state.open = false
+}
+</script>
